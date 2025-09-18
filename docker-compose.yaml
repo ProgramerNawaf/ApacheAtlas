@@ -1,0 +1,26 @@
+version: '2'
+
+services:
+  jobmanager:
+    image: apache/flink:1.16.2-java11
+    command: jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+    ports:
+      - '8081:8081'
+    networks:
+      - flink-network
+
+  taskmanager:
+    image: apache/flink:1.16.2-java11
+    command: taskmanager
+    depends_on:
+      - jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+    networks:
+      - flink-network
+
+networks:
+  flink-network:
+    driver: bridge
