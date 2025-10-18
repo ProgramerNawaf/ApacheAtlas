@@ -1,0 +1,307 @@
+
+import requests
+import json
+import pyodbc
+from requests.auth import HTTPBasicAuth
+import time
+from collections import defaultdict
+from datetime import datetime
+import pandas as pd
+from urllib.parse import quote_plus
+import sqlalchemy
+import urllib
+
+SQL_HOST = "localhost"
+SQL_PORT = "1433"
+SQL_DATABASE = "MetadataTracking"
+SQL_USERNAME = "crdetect1"
+SQL_PASSWORD = "123456"
+
+
+
+params = urllib.parse.quote_plus( f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+            f"SERVER={SQL_HOST},{SQL_PORT};"
+            f"DATABASE=DataQuality;"
+            f"UID=crdetect;"
+            f"PWD={SQL_PASSWORD};"
+            f"TrustServerCertificate=yes;")
+
+params1 = urllib.parse.quote_plus( f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+            f"SERVER={SQL_HOST},{SQL_PORT};"
+            f"DATABASE={SQL_DATABASE};"
+            f"UID={SQL_USERNAME};"
+            f"PWD={SQL_PASSWORD};"
+            f"TrustServerCertificate=yes;")
+        
+
+            
+
+conn=sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(params),
+execution_options={
+    "isolation_level": "AUTOCOMMIT"
+},encoding="utf8",fast_executemany = True,connect_args={'connect_timeout': 10}) 
+
+conn1=sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(params1),
+execution_options={
+    "isolation_level": "AUTOCOMMIT"
+},encoding="utf8",fast_executemany = True,connect_args={'connect_timeout': 10}) 
+
+
+try:
+
+
+
+            query = """
+                select TableSchema as TABLE_SCHEMA , Table_Name_EN as TABLE_NAME from REFRNC.Tables where Dataset_ID=1422 -- and Table_Name_EN='AddressType'
+            """
+
+            cmcTableDF = pd.read_sql(query, conn)
+            
+            # if snapshotDF.empty:
+            #     print('hey')
+            #     query = f"""
+            #      SET NOCOUNT ON
+            #             INSERT INTO [dbo].[schema_snapshots]
+            #                 ([dataset_id])
+            #             VALUES
+            #                 (4
+            #                 )
+            #             select 1 as a
+            #     """
+            #     print(query)
+            #     result = pd.read_sql(query, conn1)
+            
+
+            # query = """
+            
+            # SELECT TOP (1) *
+            # FROM dbo.schema_snapshots
+            # WHERE dataset_id = 4
+            # ORDER BY snapshot_id DESC;
+            # """
+
+            # snapshotDF = pd.read_sql(query, conn1)
+            
+            # print(snapshotDF['snapshot_id'][0])
+
+            
+            table_query = """      
+                SELECT 
+                ss.name              AS TABLE_SCHEMA,
+                st.name              AS TABLE_NAME,
+                --st.create_date       AS TABLE_CREATED_DATE,
+              --  st.modify_date       AS TABLE_MODIFY_DATE,
+               -- 'BASE TABLE'         AS TABLE_TYPE,
+              --  st.object_id         AS TABLE_OBJECT_ID,
+               -- isc.ORDINAL_POSITION AS COLUMN_ID,
+                isc.COLUMN_NAME      AS COLUMN_NAME,
+                CASE WHEN DATA_TYPE IN ('bigint', 'int', 'smallint', 'tinyint', 'bit', 'ntext', 'money', 'smallmoney', 'date', 'datetime', 'smalldatetime', 'uniqueidentifier') 
+                THEN DATA_TYPE WHEN DATA_TYPE IN ('numeric', 'decimal') THEN DATA_TYPE + ' (' + CONVERT(varchar(50), NUMERIC_PRECISION) + ', ' + CONVERT(varchar(50), NUMERIC_SCALE) + ')'
+                WHEN DATA_TYPE IN ('float') THEN DATA_TYPE + ' (' + CONVERT(varchar(50), NUMERIC_PRECISION) + ')' WHEN DATA_TYPE IN ('datetime2', 'datetimeoffset', 'time') THEN DATA_TYPE 
+                + ' (' + CONVERT(varchar(50), DATETIME_PRECISION) + ')' WHEN DATA_TYPE IN ('char', 'varchar', 'text', 'nchar', 'nvarchar', 'binary', 'varbinary', 'image') 
+                AND CHARACTER_MAXIMUM_LENGTH != -1 THEN DATA_TYPE + '(' + CONVERT(varchar(50), CHARACTER_MAXIMUM_LENGTH) + ')' 
+                WHEN DATA_TYPE IN ('char', 'varchar', 'text', 'nchar', 'nvarchar', 'binary', 'varbinary', 'image') AND CHARACTER_MAXIMUM_LENGTH = -1 
+                THEN DATA_TYPE + ' (max)' ELSE DATA_TYPE END  as DATA_TYPE 
+                FROM sys.tables st
+                JOIN sys.schemas ss 
+                ON ss.schema_id = st.schema_id
+                JOIN INFORMATION_SCHEMA.COLUMNS isc
+                ON isc.TABLE_SCHEMA = ss.name
+                AND isc.TABLE_NAME   = st.name
+                WHERE st.name IN (N'AddressType', N'AddressType1')
+                ORDER BY ss.name, st.name, isc.ORDINAL_POSITION;
+            """
+
+            # Use pandas read_sql to directly get a DataFrame
+            metadataDF = pd.read_sql(table_query, conn)
+            
+            # print(metadataDF)
+
+            tablesDF = (
+                metadataDF[['TABLE_SCHEMA','TABLE_NAME']]
+                .drop_duplicates()
+                .sort_values(['TABLE_SCHEMA','TABLE_NAME'])
+                .reset_index(drop=True)
+            )
+
+            set_tables = set(tablesDF['TABLE_SCHEMA'] + '.' + tablesDF['TABLE_NAME'])
+            set_cmc    = set(cmcTableDF['TABLE_SCHEMA'] + '.' + cmcTableDF['TABLE_NAME'])
+            print(set_tables)
+            print(set_cmc)
+            common_tables = sorted(set_tables & set_cmc)
+            added_tables=sorted(set_tables - set_cmc)
+            deleted_tables=sorted(set_cmc - set_tables)
+            
+
+
+            added_columns= metadataDF.loc[(metadataDF['TABLE_SCHEMA'] + '.' + metadataDF['TABLE_NAME']).isin(added_tables)]
+
+
+
+            query = f"""
+                select TableSchema as TABLE_SCHEMA , Table_Name_EN as TABLE_NAME    , COLUMN_ID , Column_Name_EN as COLUMN_NAME ,
+                Data_Type+isnull(Length, '') as DATA_TYPE
+                from REFRNC.Columns c
+                join REFRNC.Tables t on t.Table_ID=c.Table_ID
+                where t.Dataset_ID=1422 and TableSchema+'.'+Table_Name_EN  in  ({", ".join(f"'{x}'" for x in common_tables)})
+            """
+            cmc_common_table_columns = pd.read_sql(query, conn)
+            source_common_table_columns= metadataDF.loc[(metadataDF['TABLE_SCHEMA'] + '.' + metadataDF['TABLE_NAME']).isin(common_tables)]
+
+            query = f"""
+                select TableSchema as TABLE_SCHEMA , Table_Name_EN as TABLE_NAME    , COLUMN_ID , Column_Name_EN as COLUMN_NAME,
+                Data_Type+isnull(Length, '') as DATA_TYPE from REFRNC.Columns c
+                join REFRNC.Tables t on t.Table_ID=c.Table_ID
+                where t.Dataset_ID=1422 and TableSchema+'.'+Table_Name_EN  in ({", ".join(f"'{x}'" for x in deleted_tables)})
+            """
+            # )
+            deleted_columns = pd.read_sql(query, conn)
+            
+
+            print(cmc_common_table_columns , 'cmc')
+            print(source_common_table_columns)
+            set_source_columns = set(source_common_table_columns['COLUMN_NAME'].astype(str).str.strip())
+            set_cmc_columns   = set(cmc_common_table_columns['COLUMN_NAME'].astype(str).str.strip())
+            added_columns_common=sorted(set_source_columns - set_cmc_columns)
+            deleted_columns_common=sorted(set_cmc_columns - set_source_columns)
+            print(deleted_columns_common)
+            extra = source_common_table_columns.loc[
+            source_common_table_columns['COLUMN_NAME'].astype(str).str.strip().isin(added_columns_common)
+            ]
+            added_columns = (
+            pd.concat([added_columns, extra], ignore_index=True)
+            .drop_duplicates(subset=['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME'])
+            )
+
+            extra = cmc_common_table_columns.loc[
+            cmc_common_table_columns['COLUMN_NAME'].astype(str).str.strip().isin(deleted_columns_common)
+            ]
+            
+            deleted_columns = (
+            pd.concat([deleted_columns, extra], ignore_index=True)
+            .drop_duplicates(subset=['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME'])
+            )
+
+
+            print(added_columns)
+            print(deleted_columns)
+            print(source_common_table_columns)
+            source_common_table_columns= source_common_table_columns.loc[
+            ~source_common_table_columns['COLUMN_NAME'].astype(str).str.strip().isin(added_columns_common)
+            ]
+            print(source_common_table_columns)
+
+            cmc_common_table_columns=cmc_common_table_columns.loc[
+            ~cmc_common_table_columns['COLUMN_NAME'].astype(str).str.strip().isin(deleted_columns_common)
+            ]
+            print(cmc_common_table_columns)
+
+
+            left  = source_common_table_columns.copy()
+            right = cmc_common_table_columns.copy()
+
+            # normalize for fair comparison (trim + case-insensitive)
+            for d in (left, right):
+                d['TABLE_SCHEMA'] = d['TABLE_SCHEMA'].astype(str).str.strip()
+                d['TABLE_NAME']   = d['TABLE_NAME'].astype(str).str.strip()
+                d['COLUMN_NAME']  = d['COLUMN_NAME'].astype(str).str.strip()
+                d['DATA_TYPE_N']  = d['DATA_TYPE'].astype(str).str.strip().str.lower()
+
+            # inner join on schema/table/column, compare types
+            modified_column = (
+                left.merge(
+                    right[['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME','DATA_TYPE_N']],
+                    on=['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME'],
+                    how='inner',
+                    suffixes=('_src','_cmc')
+                )
+                .loc[lambda x: x['DATA_TYPE_N_src'] != x['DATA_TYPE_N_cmc']]
+                .assign(SOURCE_DATA_TYPE=lambda x: x['DATA_TYPE_N_src'],
+                        CMC_DATA_TYPE=lambda x: x['DATA_TYPE_N_cmc'])
+                [['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME','SOURCE_DATA_TYPE','CMC_DATA_TYPE']]
+            )
+
+            print(modified_column)
+            # print("Added in Tables:", added_tables)
+            # print("Deleted Tables:", deleted_tables)
+            # print("Added in Columns:",added_columns)
+            # print("Deleted in Columns:",deleted_columns)
+
+
+            # for r in tablesDF.itertuples(index=False):
+            #     fq = f"{r.TABLE_SCHEMA}.{r.TABLE_NAME}"
+            #     print(fq, r.TABLE_OBJECT_ID)
+            #     print()
+                # query =f"""
+                #     SELECT *
+                #     FROM [dbo].[schema_metadata] sm
+                #     where sm.table_object_id={r.TABLE_OBJECT_ID} and sm.snapshot_id={snapshotDF['snapshot_id'][0]}
+                # """
+                # print(query)
+                # result = pd.read_sql(query, conn1)
+                # if result.empty:
+                    
+                #     query =f"""
+                #      SET NOCOUNT ON
+                #             INSERT INTO [dbo].[schema_metadata]
+                #             ([snapshot_id]
+                #             ,[schema_name]
+                #             ,[table_name]
+                #             ,[table_object_id]
+                #             ,[table_create_date]
+                #             ,[table_modify_date])
+                #         VALUES
+                #             ({snapshotDF['snapshot_id'][0]}
+                #             ,'{r.TABLE_SCHEMA}'
+                #             ,'{r.TABLE_NAME}'
+                #             ,{r.TABLE_OBJECT_ID}
+                #             ,'{r.TABLE_CREATED_DATE}'
+                #             ,'{r.TABLE_MODIFY_DATE}'
+                #             )
+                #             select 1 as a
+                #     """
+                #     print(query)
+                #     result = pd.read_sql(query, conn1)
+                # else:
+                #     print(result , r)
+                #     if r.TABLE_NAME == result['table_name'][0]:
+                #         print('same')
+                #     else:
+                #         print('not')
+
+                    
+                        
+
+
+
+            # tableColumnsDF = metadataDF.groupby('TABLE_OBJECT_ID')
+            # print(tableColumnsDF)
+
+
+
+
+            # for table_object_id, group in tableColumnsDF:
+            #     print(f"\nTable Object ID: {table_object_id}")
+            #     print(f"Number of columns: {len(group)}")
+            #     print(group)
+            #     query = f"""
+            #             SELECT *
+            #             FROM [dbo].[schema_metadata] sm
+            #             left join [dbo].[schema_snapshots] ss on ss.snapshot_id=sm.snapshot_id
+            #             where sm.table_object_id={table_object_id} and ss.dataset_id=4
+            #         """
+            #     schemaDF = pd.read_sql(query, conn1)
+            #     if schemaDF.empty:
+            #         query = f"""
+                        
+            #             select 1 as a
+            #         """
+            #         print(snapshotDF)
+            #         result = pd.read_sql(query, conn1)
+            #     else:
+            #         print(schemaDF)
+
+           
+
+except Exception as e:
+            print(f"❌ Error creating table : {str(e)}")
