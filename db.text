@@ -1,0 +1,80 @@
+USE [MetadataTracking]
+GO
+
+/****** Object:  Table [dbo].[schema_snapshots]    Script Date: 10/19/2025 3:37:27 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[schema_snapshots](
+	[snapshot_id] [int] IDENTITY(1,1) NOT NULL,
+	[dataset_id] [int] NOT NULL,
+	[snapshot_timestamp] [datetime2](7) NOT NULL,
+	[snapshot_status] [varchar](20) NULL,
+	[total_objects_captured] [int] NULL,
+	[snapshot_hash] [varchar](64) NULL,
+	[is_baseline] [bit] NULL,
+	[error_message] [nvarchar](max) NULL,
+	[created_by] [nvarchar](128) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[snapshot_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[schema_snapshots] ADD  DEFAULT (sysdatetime()) FOR [snapshot_timestamp]
+GO
+
+ALTER TABLE [dbo].[schema_snapshots] ADD  DEFAULT ('IN_PROGRESS') FOR [snapshot_status]
+GO
+
+ALTER TABLE [dbo].[schema_snapshots] ADD  DEFAULT ((0)) FOR [is_baseline]
+GO
+
+ALTER TABLE [dbo].[schema_snapshots] ADD  DEFAULT (suser_sname()) FOR [created_by]
+GO
+
+
+
+
+
+
+USE [MetadataTracking]
+GO
+
+/****** Object:  Table [dbo].[schema_metadata1]    Script Date: 10/19/2025 3:39:24 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[schema_metadata1](
+	[id] [bigint] IDENTITY(1,1) NOT NULL,
+	[snapshot_id] [int] NOT NULL,
+	[metadata_cmc_id] [int] NULL,
+	[source_object_id] [int] NULL,
+	[metadata_create_date] [datetime2](7) NULL,
+	[metadata_modify_date] [datetime2](7) NULL,
+	[change_type] [varchar](max) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[schema_metadata1]  WITH CHECK ADD  CONSTRAINT [FK_schema_metadata_snapshot2] FOREIGN KEY([snapshot_id])
+REFERENCES [dbo].[schema_snapshots] ([snapshot_id])
+GO
+
+ALTER TABLE [dbo].[schema_metadata1] CHECK CONSTRAINT [FK_schema_metadata_snapshot2]
+GO
+
+
+
+
+
