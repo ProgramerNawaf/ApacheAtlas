@@ -52,7 +52,8 @@ try:
 
 
             query = """
-                select TableSchema as TABLE_SCHEMA , Table_Name_EN as TABLE_NAME from REFRNC.Tables where Dataset_ID=1422 -- and Table_Name_EN='AddressType'
+                select TableSchema as TABLE_SCHEMA , Table_Name_EN as TABLE_NAME from REFRNC.Tables where Dataset_ID=1422 
+                -- and Table_Name_EN='AddressType'
             """
 
             cmcTableDF = pd.read_sql(query, conn)
@@ -133,7 +134,7 @@ try:
             deleted_tables=sorted(set_cmc - set_tables)
             
 
-
+            # added_tables_df= tablesDF.loc[(metadataDF['TABLE_SCHEMA'] + '.' + metadataDF['TABLE_NAME']).isin(added_tables)]
             added_columns= metadataDF.loc[(metadataDF['TABLE_SCHEMA'] + '.' + metadataDF['TABLE_NAME']).isin(added_tables)]
 
 
@@ -158,13 +159,13 @@ try:
             deleted_columns = pd.read_sql(query, conn)
             
 
-            print(cmc_common_table_columns , 'cmc')
-            print(source_common_table_columns)
+            # print(cmc_common_table_columns , 'cmc')
+            # print(source_common_table_columns)
             set_source_columns = set(source_common_table_columns['COLUMN_NAME'].astype(str).str.strip())
             set_cmc_columns   = set(cmc_common_table_columns['COLUMN_NAME'].astype(str).str.strip())
             added_columns_common=sorted(set_source_columns - set_cmc_columns)
             deleted_columns_common=sorted(set_cmc_columns - set_source_columns)
-            print(deleted_columns_common)
+            # print(deleted_columns_common)
             extra = source_common_table_columns.loc[
             source_common_table_columns['COLUMN_NAME'].astype(str).str.strip().isin(added_columns_common)
             ]
@@ -200,28 +201,66 @@ try:
             left  = source_common_table_columns.copy()
             right = cmc_common_table_columns.copy()
 
-            # normalize for fair comparison (trim + case-insensitive)
+            # normalize
             for d in (left, right):
                 d['TABLE_SCHEMA'] = d['TABLE_SCHEMA'].astype(str).str.strip()
                 d['TABLE_NAME']   = d['TABLE_NAME'].astype(str).str.strip()
                 d['COLUMN_NAME']  = d['COLUMN_NAME'].astype(str).str.strip()
                 d['DATA_TYPE_N']  = d['DATA_TYPE'].astype(str).str.strip().str.lower()
 
-            # inner join on schema/table/column, compare types
             modified_column = (
                 left.merge(
-                    right[['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME','DATA_TYPE_N']],
+                    right[['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME','DATA_TYPE_N','COLUMN_ID']],
                     on=['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME'],
                     how='inner',
                     suffixes=('_src','_cmc')
                 )
                 .loc[lambda x: x['DATA_TYPE_N_src'] != x['DATA_TYPE_N_cmc']]
-                .assign(SOURCE_DATA_TYPE=lambda x: x['DATA_TYPE_N_src'],
-                        CMC_DATA_TYPE=lambda x: x['DATA_TYPE_N_cmc'])
-                [['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME','SOURCE_DATA_TYPE','CMC_DATA_TYPE']]
+                .assign(
+                    SOURCE_DATA_TYPE=lambda x: x['DATA_TYPE_N_src'],
+                    CMC_DATA_TYPE=lambda x: x['DATA_TYPE_N_cmc'],
+                    CMC_COLUMN_ID=lambda x: x['COLUMN_ID']  # optional rename
+                )
+                [['TABLE_SCHEMA','TABLE_NAME','COLUMN_NAME','SOURCE_DATA_TYPE','CMC_DATA_TYPE','COLUMN_ID']]
+                .reset_index(drop=True)
             )
 
-            print(modified_column)
+            print(added_tables , 'added tables')
+            print(deleted_tables , 'deleted tables')
+            print(added_columns , 'added columns')
+            print(deleted_columns , 'deleted columns')
+            print(modified_column , 'modified columns')
+            # if added_tables and deleted_tables and not added_columns.empty and not deleted_columns.empty and not modified_column.empty :
+            # if not deleted_columns.empty:
+
+            #    df_ins = pd.DataFrame({
+            #     'snapshot_id':        [16] * len(deleted_columns),
+            #     'metadata_cmc_id':    deleted_columns['COLUMN_ID'].astype('Int64'),
+            #     'change_type':        'Delete'
+            # })
+            # df_ins = df_ins.dropna(subset=['metadata_cmc_id'])  # keep only valid IDs
+
+            # df_ins.to_sql('schema_metadata1', conn1 , schema='dbo', if_exists='append', index=False)
+
+
+            # if not modified_column.empty:
+            #     df_ins = pd.DataFrame({
+            #             'snapshot_id':        [16] * len(modified_column),
+            #             'metadata_cmc_id':    modified_column['COLUMN_ID'].astype('Int64'),
+            #             'change_type':        modified_column['SOURCE_DATA_TYPE']
+            #         })
+            #     df_ins = df_ins.dropna(subset=['metadata_cmc_id'])  # keep only valid IDs
+
+            #     df_ins.to_sql('schema_metadata1', conn1 , schema='dbo', if_exists='append', index=False)
+
+            if not added_columns.empty:
+                df_ins = pd.DataFrame({
+                        'snapshot_id':        [16] * len(added_columns),
+                        'change_type':        added_columns['TABLE_SCHEMA']+added_columns['TABLE_NAME']+added_columns['COLUMN_NAME']+added_columns['DATA_TYPE']
+                    })
+
+                df_ins.to_sql('schema_metadata1', conn1 , schema='dbo', if_exists='append', index=False)
+
             # print("Added in Tables:", added_tables)
             # print("Deleted Tables:", deleted_tables)
             # print("Added in Columns:",added_columns)
