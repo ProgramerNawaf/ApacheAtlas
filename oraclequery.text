@@ -1,0 +1,118 @@
+[DatabaseSystem.Oracle]: {
+        schemas: `SELECT USERNAME AS DATABASE FROM SYS.ALL_USERS WHERE USERNAME NOT IN ('SYS', 'SYSAUX', 'SYSTEM', 'GSMCATUSER', 'MDDATA',
+                                                                                        'SYSBACKUP', 'REMOTE_SCHEDULER_AGENT', 'GSMUSER',
+                                                                                        'APEX_PUBLIC_USER', 'SYSRAC', 'AUDSYS', 'DIP',
+                                                                                        'SYSKM', 'PLAYGROUND', 'ORACLE_OCM', 'SYSDG',
+                                                                                        'SPATIAL_CSW_ADMIN_USR', 'XS$NULL', 'OJVMSYS',
+                                                                                        'LBACSYS', 'OUTLN', 'SYS$UMF', 'DBSNMP',
+                                                                                        'APPQOSSYS', 'DBSFWUSER', 'GGSYS', 'ANONYMOUS',
+                                                                                        'FLOWS_FILES', 'CTXSYS', 'SI_INFORMTN_SCHEMA',
+                                                                                        'DVSYS', 'DVF', 'GSMADMIN_INTERNAL', 'ORDPLUGINS',
+                                                                                        'APEX_050000', 'MDSYS', 'OLAPSYS', 'ORDDATA',
+                                                                                        'XDB', 'WMSYS', 'ORDSYS')`,
+        metadata: (schema: string): string => {
+            return `SELECT
+            main.OWNER AS TABLE_SCHEMA,
+            TABLE_NAME,
+            COLUMN_NAME AS ATTRIBUTE_NAME,
+            mview.DETAILOBJ_OWNER AS BASE_SCHEMA,
+            mview.DETAILOBJ_NAME AS BASE_TABLE,
+            mview.DETAILOBJ_COLUMN AS BASE_COLUMN,
+            CASE
+                WHEN DATA_TYPE = 'NUMBER' AND DATA_PRECISION IS NOT NULL AND DATA_SCALE IS NOT NULL THEN 'NUMBER (' || DATA_PRECISION || ', ' || DATA_SCALE || ')'
+                WHEN DATA_TYPE = 'FLOAT' AND DATA_PRECISION IS NOT NULL THEN 'FLOAT ' || '(' || DATA_PRECISION || ')'
+                WHEN DATA_TYPE IN ('LONG', 'DATE', 'BINARY_FLOAT', 'BINARY_DOUBLE', 'LONG RAW','ROWID', 'UROWID', 'CLOB', 'NCLOB', 'BLOB', 'BFILE') THEN DATA_TYPE
+                WHEN DATA_TYPE IN ('VARCHAR', 'VARCHAR2', 'NVARCHAR2') AND CHAR_USED = 'B' THEN DATA_TYPE || ' (' || CHAR_LENGTH || ' BYTE)'
+                WHEN DATA_TYPE IN ('VARCHAR','VARCHAR2', 'NVARCHAR2') AND CHAR_USED = 'C' THEN DATA_TYPE || ' (' || CHAR_LENGTH || ' CHAR)'
+                WHEN DATA_TYPE IN ('NCHAR', 'CHAR') THEN DATA_TYPE || ' (' || CHAR_LENGTH || ')'
+                WHEN DATA_TYPE LIKE 'TIMESTAMP%' THEN DATA_TYPE
+                ELSE DATA_TYPE
+            END AS DATA_TYPE,
+            CASE (SELECT
+                    ALL_CONSTRAINTS.CONSTRAINT_TYPE
+                  FROM
+                    ALL_CONSTRAINTS, ALL_CONS_COLUMNS
+                  WHERE
+                    ALL_CONSTRAINTS.OWNER = '${schema}'
+                    and ALL_CONSTRAINTS.CONSTRAINT_TYPE = 'P'
+                    and ALL_CONSTRAINTS.CONSTRAINT_NAME = ALL_CONS_COLUMNS.CONSTRAINT_NAME
+                    and ALL_CONSTRAINTS.OWNER = ALL_CONS_COLUMNS.OWNER
+                    and ALL_CONS_COLUMNS.TABLE_NAME = main.TABLE_NAME
+                    and ALL_CONS_COLUMNS.COLUMN_NAME = main.COLUMN_NAME
+                    AND ROWNUM <= 1)
+            WHEN 'P' THEN 'Yes'
+            ELSE 'No' END IS_PK,
+            CASE (SELECT
+                COUNT(c_pk.table_name) count
+              FROM
+                all_cons_columns a
+              JOIN all_constraints c ON a.owner = c.owner
+                AND a.constraint_name = c.constraint_name
+              JOIN all_constraints c_pk ON c.r_owner = c_pk.owner
+                AND c.r_constraint_name = c_pk.constraint_name
+              WHERE
+                a.OWNER = '${schema}'
+                AND c.constraint_type = 'R'
+                AND a.TABLE_NAME = COALESCE(mview.DETAILOBJ_NAME, main.TABLE_NAME)
+                AND a.COLUMN_NAME = COALESCE(mview.DETAILOBJ_COLUMN, main.COLUMN_NAME))
+            WHEN 0 THEN 'No'
+            ELSE 'Yes' END IS_FK,
+            COALESCE((SELECT
+                c.R_OWNER
+              FROM
+                all_cons_columns a
+              JOIN all_constraints c ON a.owner = c.owner
+                AND a.constraint_name = c.constraint_name
+              JOIN all_constraints c_pk ON c.r_owner = c_pk.owner
+                AND c.r_constraint_name = c_pk.constraint_name
+              WHERE
+                a.OWNER = '${schema}'
+                AND c.constraint_type = 'R'
+                AND a.TABLE_NAME = COALESCE(mview.DETAILOBJ_NAME, main.TABLE_NAME)
+                AND a.COLUMN_NAME = COALESCE(mview.DETAILOBJ_COLUMN, main.COLUMN_NAME)
+                AND ROWNUM <= 1), ' ') REFERENCED_SCHEMA,
+            COALESCE((SELECT
+                c_pk.table_name r_table_name
+              FROM
+                all_cons_columns a
+              JOIN all_constraints c ON a.owner = c.owner
+                AND a.constraint_name = c.constraint_name
+              JOIN all_constraints c_pk ON c.r_owner = c_pk.owner
+                AND c.r_constraint_name = c_pk.constraint_name
+              WHERE
+                a.OWNER = '${schema}'
+                AND c.constraint_type = 'R'
+                AND a.TABLE_NAME = COALESCE(mview.DETAILOBJ_NAME, main.TABLE_NAME)
+                AND a.COLUMN_NAME = COALESCE(mview.DETAILOBJ_COLUMN, main.COLUMN_NAME)
+                AND ROWNUM <= 1), ' ') REFERENCED_TABLE,
+            COALESCE((SELECT ucc_p.column_name
+                        FROM
+                            ALL_CONSTRAINTS uc_r
+                        JOIN
+                            ALL_CONS_COLUMNS ucc_r ON ucc_r.CONSTRAINT_NAME = uc_r.CONSTRAINT_NAME
+                        JOIN
+                            ALL_CONSTRAINTS uc_p ON uc_p.CONSTRAINT_NAME = uc_r.R_CONSTRAINT_NAME
+                        JOIN
+                            ALL_CONS_COLUMNS ucc_p ON ucc_p.CONSTRAINT_NAME = uc_p.CONSTRAINT_NAME AND ucc_p.POSITION = ucc_r.POSITION
+                        WHERE
+                        uc_r.OWNER = '${schema}'
+                        AND uc_r.constraint_type = 'R'
+                        AND uc_r.TABLE_NAME = COALESCE(mview.DETAILOBJ_NAME, main.TABLE_NAME)
+                        AND ucc_r.COLUMN_NAME = COALESCE(mview.DETAILOBJ_COLUMN, main.COLUMN_NAME)
+                        AND ROWNUM <= 1), ' ') REFERENCED_COLUMN,
+            CASE
+              WHEN objects.object_type IN ('VIEW') THEN 'Yes' ELSE 'No' END AS IS_VIEW
+        FROM
+            ALL_TAB_COLUMNS main
+            LEFT JOIN
+            SYS.ALL_MVIEW_KEYS mview ON main.OWNER = mview.OWNER AND main.TABLE_NAME = mview.MVIEW_NAME AND main.COLUMN_NAME = mview.CONTAINER_COLUMN
+            LEFT JOIN 
+            all_objects objects ON main.OWNER = objects.OWNER AND main.TABLE_NAME = objects.object_name
+        WHERE
+            main.OWNER = '${schema}' -- Replace with schema name
+        ORDER BY TABLE_NAME, COLUMN_NAME, ATTRIBUTE_NAME`
+        },
+        samples: (schema: string, table: string, column: string): string => {
+            return `SELECT "${column}" FROM (SELECT DISTINCT "${column}" FROM "${schema}"."${table}") WHERE ROWNUM <= ${SAMPLES_CUTOFF} AND ${column} IS NOT NULL`;
+        },
+        switchDB: (database: string) => {return `SELECT * FROM DUAL`}
