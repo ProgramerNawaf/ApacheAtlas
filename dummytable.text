@@ -1,0 +1,17 @@
+-- Create ossys_Tenant table
+CREATE TABLE dbo.ossys_Tenant (
+    LogID NUMBER(10) NOT NULL,
+    IS_ACTIVE NUMBER(10) NOT NULL,
+    SynchTimestamp TIMESTAMP(6),
+    IS_ACTIVE1 NUMBER(10),
+    CONSTRAINT pk_ossys_Tenant PRIMARY KEY (IS_ACTIVE)
+);
+
+-- Create ossys_Tenant1 table
+CREATE TABLE dbo.ossys_Tenant1 (
+    LogID NUMBER(10) NOT NULL,
+    IS_ACTIVE NUMBER(1),
+    LastOperation CHAR(1),
+    SynchTimestamp TIMESTAMP(6),
+    CONSTRAINT pk_ossys_Tenant1 PRIMARY KEY (LogID)
+);
