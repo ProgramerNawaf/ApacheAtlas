@@ -1,17 +1,49 @@
--- Create ossys_Tenant table
-CREATE TABLE dbo.ossys_Tenant (
-    LogID NUMBER(10) NOT NULL,
-    IS_ACTIVE NUMBER(10) NOT NULL,
-    SynchTimestamp TIMESTAMP(6),
-    IS_ACTIVE1 NUMBER(10),
-    CONSTRAINT pk_ossys_Tenant PRIMARY KEY (IS_ACTIVE)
-);
+USE [Nawaf_test]
+GO
 
--- Create ossys_Tenant1 table
-CREATE TABLE dbo.ossys_Tenant1 (
-    LogID NUMBER(10) NOT NULL,
-    IS_ACTIVE NUMBER(1),
-    LastOperation CHAR(1),
-    SynchTimestamp TIMESTAMP(6),
-    CONSTRAINT pk_ossys_Tenant1 PRIMARY KEY (LogID)
-);
+/****** Object:  Table [dbo].[ossys_Tenant]    Script Date: 10/26/2025 11:32:41 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[ossys_Tenant](
+	[LogID] [int] NOT NULL,
+	[IS_ACTIVE] [int] NOT NULL,
+	[LastOperation] [char](1) NOT NULL,
+	[SynchTimestamp] [datetime2](6) NOT NULL,
+	[IS_ACTIVE1] [int] NULL,
+ CONSTRAINT [PK_ossys_Tenant] PRIMARY KEY CLUSTERED 
+(
+	[IS_ACTIVE] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+
+
+
+USE [Nawaf_test]
+GO
+
+/****** Object:  Table [dbo].[ossys_Tenant1]    Script Date: 10/26/2025 11:32:59 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[ossys_Tenant1](
+	[LogID] [int] NOT NULL,
+	[IS_ACTIVE] [bit] NOT NULL,
+	[LastOperation] [char](1) NOT NULL,
+	[SynchTimestamp] [datetime2](6) NOT NULL,
+ CONSTRAINT [PK_ossys_Tenant1] PRIMARY KEY CLUSTERED 
+(
+	[LogID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+
