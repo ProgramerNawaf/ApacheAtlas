@@ -47,3 +47,57 @@ CREATE TABLE [dbo].[ossys_Tenant1](
 GO
 
 
+
+
+
+
+CREATE TABLE dbo.CMC_Columns (
+    DATASTORE_ID int not null ,
+    PIPELINE_ID int not null ,
+    ATTRIBUTE_ID int not null ,
+    CONNECTION_ID int not null ,
+    TABLE_SCHEMA        sysname        NOT NULL,
+    TABLE_NAME          sysname        NOT NULL,
+    ATTRIBUTE_NAME      sysname        NOT NULL,
+    BASE_SCHEMA         sysname        NULL,
+    BASE_TABLE          sysname        NULL,
+    BASE_COLUMN         sysname        NULL,
+    DATA_TYPE           nvarchar(128)  NOT NULL,
+    IS_PK               sysname            NULL,
+    IS_FK               sysname            NULL,
+    REFERENCED_SCHEMA   sysname        NULL,
+    REFERENCED_TABLE    sysname        NULL,
+    REFERENCED_COLUMN   sysname        NULL,
+    IS_VIEW             sysname            NULL
+);
+GO
+select * from  dbo.CMC_Columns
+
+INSERT INTO dbo.CMC_Columns
+( DATASTORE_ID, PIPELINE_ID, ATTRIBUTE_ID, CONNECTION_ID,
+  TABLE_SCHEMA, TABLE_NAME, ATTRIBUTE_NAME,
+  BASE_SCHEMA, BASE_TABLE, BASE_COLUMN,
+  DATA_TYPE, IS_PK, IS_FK,
+  REFERENCED_SCHEMA, REFERENCED_TABLE, REFERENCED_COLUMN,
+  IS_VIEW )
+VALUES
+(104344,27504,1472726,68380,N'dbo',N'OSUSR_kzv_AssistedFlareType',N'SynchTimestamp',NULL,NULL,NULL,N'datetime2 (6)',0,0,NULL,NULL,NULL,0),
+(104258,27418,1471405,68380,N'dbo',N'ossys_Tenant',               N'SynchTimestamp',NULL,NULL,NULL,N'datetime2 (6)',0,0,NULL,NULL,NULL,0),
+(104258,27418,1471404,68380,N'dbo',N'ossys_Tenant',               N'LogID',         NULL,NULL,NULL,N'int',          1,0,NULL,NULL,NULL,0),
+(104258,27418,1471403,68380,N'dbo',N'ossys_Tenant',               N'LastOperation', NULL,NULL,NULL,N'char (1)',     0,0,NULL,NULL,NULL,0),
+(104344,27504,1472724,68380,N'dbo',N'OSUSR_kzv_AssistedFlareType',N'LogID',         NULL,NULL,NULL,N'int',          1,0,NULL,NULL,NULL,0),
+(104344,27504,1472721,68380,N'dbo',N'OSUSR_kzv_AssistedFlareType',N'IS_ACTIVE',     NULL,NULL,NULL,N'bit',          0,0,NULL,NULL,NULL,0),
+(104344,27504,1472722,68380,N'dbo',N'OSUSR_kzv_AssistedFlareType',N'LABEL',         NULL,NULL,NULL,N'nvarchar (50)',0,0,NULL,NULL,NULL,0),
+(104344,27504,1472723,68380,N'dbo',N'OSUSR_kzv_AssistedFlareType',N'LastOperation', NULL,NULL,NULL,N'char (1)',     0,0,NULL,NULL,NULL,0),
+(104258,27418,1471402,68380,N'dbo',N'ossys_Tenant',               N'IS_ACTIVE',     NULL,NULL,NULL,N'bit',          0,0,NULL,NULL,NULL,0),
+(104344,27504,1472725,68380,N'dbo',N'OSUSR_kzv_AssistedFlareType',N'ORDER',         NULL,NULL,NULL,N'int',          0,0,NULL,NULL,NULL,0);
+GO
+
+
+
+select DATASTORE_ID	,PIPELINE_ID, ATTRIBUTE_ID	,CONNECTION_ID	,TABLE_SCHEMA	,TABLE_NAME	,ATTRIBUTE_NAME	,BASE_SCHEMA	,BASE_TABLE	,BASE_COLUMN	
+,DATA_TYPE	,
+case when IS_PK=0 then 'No' else 'Yes' end as IS_PK	,case when IS_FK=0 then 'No' else 'Yes' end as IS_FK 	,REFERENCED_SCHEMA	,REFERENCED_TABLE	
+,REFERENCED_COLUMN	,IS_VIEW from  dbo.CMC_Columns
+
+
