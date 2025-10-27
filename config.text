@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 
+import numpy as np
 import requests
 from classes.AzureDevops import AzureDevops
 from classes.Connection import Connection
@@ -25,7 +26,7 @@ if __name__ == '__main__':
         "Add Attribute": [],
         "Delete Attribute": [],
         "Change Attribute":[],
-        "metadata": {
+        "Logs": {
             "detection_time": datetime.now().isoformat(),
             "total_changes": 0
         },
@@ -81,32 +82,12 @@ if __name__ == '__main__':
                 AND P.IsActive = 1 
 '''
     cmcTableDF=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
-    # cmcTableDF = cmcTableDF.groupby('Datastore_ID')
-    # # print(cmcTableDF)
-    # for datastoreID, cmcTableDF in cmcTableDF:
-        
 
-    
-#     query=f'''
-#     select * from Meta_Connection where ID={cmcTableDF['CONNECTION_ID'][cmcTableDF.index.min()]}
-# '''
-    connectionDF=customMetaDataCatlogDatabase.retriveAConnection(cmcTableDF['CONNECTION_ID'][cmcTableDF.index.min()])
-    connectionDF=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
-    
-    # print(connectionDF)
-    # connectionDF['Hostname'][0]='10.0.122.203'
-    # connectionDF['Port'][0]='1433'
-    # connectionDF['DB_Service_Name'][0]='Nawaf_Test'
-    # connectionDF['Username'][0]='loadTest'
-    # connectionDF['Password'][0]='123456'
+#     connectionDF=customMetaDataCatlogDatabase.retriveAConnection(cmcTableDF['CONNECTION_ID'][cmcTableDF.index.min()])
+#     connectionDF=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
 
-    
-    
-    
-
-    # print('testing connection sourceDatabase ',sourceConnection.testConnection())
     if(os.getenv('TYPE') == 'SQL'):
-       sourceConnection=Connection(IP='10.0.122.203',port= '1433',databaseName='Nawaf_Test',password='123456' ,userName='loadTest',databaseType='SQL')
+       sourceConnection=Connection(IP='localhost',port= '1433',databaseName='MetadataTracking',password='123456' ,userName='crdetect1',databaseType='SQL')
        print(sourceConnection.connect())
        print('testing connection sourceDatabase ',sourceConnection.testConnection())
        metadataDF=sourceConnection.getMetadataDF()
@@ -118,8 +99,10 @@ if __name__ == '__main__':
 
     
     
-    print(cmcTableDF)
+    
 
+
+    # print(cmcTableDF)
     print(metadataDF)
  
 
@@ -140,28 +123,36 @@ if __name__ == '__main__':
     )
     deleted_columns = deleted_columns[deleted_columns['_merge'] == 'left_only'].drop(columns='_merge')
 
-    added_tables = added_columns.groupby(['TABLE_SCHEMA', 'TABLE_NAME' ])
 
-    deleted_tables = deleted_columns.groupby(['TABLE_SCHEMA', 'TABLE_NAME' , 'PIPELINE_ID'])
+    added_tables = (
+    added_columns[['TABLE_SCHEMA', 'TABLE_NAME']]
+    .drop_duplicates()
+    .to_dict('records')
+    )
 
-    
-    for (schema, table), table_df in added_tables:
-        # schema, table_name = table.split('.')
-        CR_DETECTION['Add Table'].append({
-            'TABLE_SCHEMA': schema,
-            'TABLE_NAME': table
-        })
-        CR_DETECTION['metadata']['total_changes']=CR_DETECTION['metadata']['total_changes']+1
-        
+    CR_DETECTION['Add Table'].extend(added_tables)
+    CR_DETECTION['Logs']['total_changes'] += len(added_tables)
 
-    for (schema, table , pipeline_id), table_df in deleted_tables:
-        
-        CR_DETECTION['Delete Table'].append({
-            'TABLE_SCHEMA': schema,
-            'TABLE_NAME': table ,
-        })
-        CR_DETECTION['metadata']['total_changes']=CR_DETECTION['metadata']['total_changes']+1
-        CR_DETECTION['Impacted Pipliens'].append(int(pipeline_id))
+
+    deleted_tables = (
+    deleted_columns[['TABLE_SCHEMA', 'TABLE_NAME' , 'PIPELINE_ID']]
+    .drop_duplicates()
+    .to_dict('records')
+    )
+    pipe_ids = (
+    deleted_columns['PIPELINE_ID']
+    .dropna()
+    .tolist()
+    )
+
+
+   
+
+    CR_DETECTION['Delete Table'].extend(deleted_tables)
+    CR_DETECTION['Logs']['total_changes'] += len(deleted_tables)
+    CR_DETECTION['Impacted Pipliens'] = list(
+        dict.fromkeys(CR_DETECTION['Impacted Pipliens'] + pipe_ids)
+    )
 
 
     common_table_columns = cmcTableDF.merge(
@@ -179,60 +170,70 @@ if __name__ == '__main__':
     added_columns = common_table_columns[common_table_columns['_merge'] == 'right_only'].copy()
     common_columns = common_table_columns[common_table_columns['_merge'] == 'both'].copy()
 
-    
+    records = (
+        added_columns[list({
+        'TABLE_SCHEMA': 'TABLE_SCHEMA',
+        'TABLE_NAME': 'TABLE_NAME',
+        'ATTRIBUTE_NAME': 'ATTRIBUTE_NAME',
+        'DATA_TYPE_SOURCE': 'DATA_TYPE',
+        'IS_PK_SOURCE': 'IS_PK',
+        'IS_FK_SOURCE': 'IS_FK',
+    }.keys())]
+            .drop_duplicates()
+            .replace({np.nan: None})
+            .to_dict('records')
+    )
 
-    for row in added_columns.itertuples(index=False):
-        print(row)
-        CR_DETECTION['Add Attribute'].append({
-            'TABLE_SCHEMA': row.TABLE_SCHEMA,
-            'TABLE_NAME': row.TABLE_NAME,
-            'ATTRIBUTE_NAME':row.ATTRIBUTE_NAME,
-            'DATA_TYPE': row.DATA_TYPE_SOURCE,
-            'IS_PK': row.IS_PK_SOURCE,
-            'IS_FK': row.IS_FK_SOURCE
-            # 'IS_NULLABLE':row.IS_NULLABLE
-        })
-        CR_DETECTION['metadata']['total_changes']=CR_DETECTION['metadata']['total_changes']+1
+    # Append and bump the counter
+    CR_DETECTION['Add Attribute'].extend(records)
+    CR_DETECTION['Logs']['total_changes'] += len(records)
 
-       
-    for row in deleted_common_columns.itertuples(index=False):
-        
-        CR_DETECTION['Delete Attribute'].append({
-            'TABLE_SCHEMA': row.TABLE_SCHEMA,
-            'TABLE_NAME': row.TABLE_NAME,
-            'ATTRIBUTE_NAME':row.ATTRIBUTE_NAME,
-            'IS_PK': row.IS_PK_CMC
-            # 'IS_FK': row.IS_FK_CMC
-            # 'IS_NULLABLE':row.IS_NULLABLE
-        })
-        CR_DETECTION['metadata']['total_changes']=CR_DETECTION['metadata']['total_changes']+1
-        # CR_DETECTION['Impacted Pipliens'].append(int(pipeline_id))
 
-    pipeline_ids = deleted_common_columns['PIPELINE_ID'].unique().astype(int).tolist()
-     
-    CR_DETECTION['Impacted Pipliens'].extend(pipeline_ids)
+    records = (
+        deleted_common_columns[list({
+        'TABLE_SCHEMA': 'TABLE_SCHEMA',
+        'TABLE_NAME': 'TABLE_NAME',
+        'ATTRIBUTE_NAME': 'ATTRIBUTE_NAME',
+        'IS_PK_CMC': 'IS_PK',
+        'IS_FK_CMC': 'IS_FK',
+    }.keys())]
+            .drop_duplicates()
+            .replace({np.nan: None})
+            .to_dict('records')
+    )
+
+    # Append and bump the counter
+    CR_DETECTION['Delete Attribute'].extend(records)
+    CR_DETECTION['Logs']['total_changes'] += len(records)
+
 
 
     modified_PK = common_table_columns[
     (common_table_columns['DATA_TYPE_CMC'].notna()) & 
     (common_table_columns['DATA_TYPE_SOURCE'].notna()) & 
     (common_table_columns['IS_PK_CMC'] !=  common_table_columns['IS_PK_SOURCE']  )
-        ].copy()  
+        ].copy().assign(CHANGE_TYPE='Primary Key')  
     
 
-
-    for row in modified_PK.itertuples(index=False):
-        print(row)
-        CR_DETECTION['Change Attribute'].append({
-            'TABLE_SCHEMA': row.TABLE_SCHEMA,
-            'TABLE_NAME': row.TABLE_NAME,
-            'ATTRIBUTE_NAME':row.ATTRIBUTE_NAME,
-            'IS_PK_CMC': row.IS_PK_CMC,
-            'IS_PK_SOURCE':row.IS_PK_SOURCE,
+    
+    
+    records = (
+        modified_PK[list({
+           'TABLE_SCHEMA': 'TABLE_SCHEMA',
+            'TABLE_NAME': 'TABLE_NAME',
+            'ATTRIBUTE_NAME':'ATTRIBUTE_NAME',
+            'IS_PK_CMC': 'IS_PK_CMC',
+            'IS_PK_SOURCE':'IS_PK_SOURCE',
             'CHANGE_TYPE':'Primary Key'
-            # 'IS_NULLABLE':row.IS_NULLABLE
-        })
-        CR_DETECTION['metadata']['total_changes']=CR_DETECTION['metadata']['total_changes']+1
+    }.keys())]
+            .drop_duplicates()
+            .replace({np.nan: None})
+            .to_dict('records')
+    )
+
+    CR_DETECTION['Change Attribute'].extend(records)
+    CR_DETECTION['Logs']['total_changes'] += len(records)
+
     
 
 
@@ -240,21 +241,26 @@ if __name__ == '__main__':
     (common_columns['DATA_TYPE_CMC'].notna()) & 
     (common_columns['DATA_TYPE_SOURCE'].notna()) & 
     (common_columns['DATA_TYPE_CMC'] != common_columns['DATA_TYPE_SOURCE'])
-        ].copy()
+        ].copy().assign(CHANGE_TYPE='Data Type and Length')
+    
+    records = (
+        modified_datatypes[list({
+           'TABLE_SCHEMA': 'TABLE_SCHEMA',
+            'TABLE_NAME': 'TABLE_NAME',
+            'ATTRIBUTE_NAME':'ATTRIBUTE_NAME',
+            'DATA_TYPE_CMC': 'DATA_TYPE_CMC',
+            'DATA_TYPE_SOURCE':'DATA_TYPE_SOURCE',
+            'CHANGE_TYPE':'Data Type and Length'
+    }.keys())]
+            .drop_duplicates()
+            .replace({np.nan: None})
+            .to_dict('records')
+    )
+
+    CR_DETECTION['Change Attribute'].extend(records)
+    CR_DETECTION['Logs']['total_changes'] += len(records)
     
 
-    for row in modified_datatypes.itertuples(index=False):
-        print(row)
-        CR_DETECTION['Change Attribute'].append({
-            'TABLE_SCHEMA': row.TABLE_SCHEMA,
-            'TABLE_NAME': row.TABLE_NAME,
-            'ATTRIBUTE_NAME':row.ATTRIBUTE_NAME,
-            'CMC_DATA_TYPE': row.DATA_TYPE_CMC,
-            'SOURCE_DATA_TYPE':row.DATA_TYPE_SOURCE,
-            'CHANGE_TYPE':'Data Type and Length'
-            # 'IS_NULLABLE':row.IS_NULLABLE
-        })
-        CR_DETECTION['metadata']['total_changes']=CR_DETECTION['metadata']['total_changes']+1
         
     pipeline_ids = modified_datatypes['PIPELINE_ID'].unique().astype(int).tolist()
     existing_ids = set(CR_DETECTION['Impacted Pipliens'])
@@ -272,8 +278,6 @@ if __name__ == '__main__':
     
     # print(workItems)
     # updateworkItem=azureDevops.updateTicket(TicketID=workItems[0]['id'],TargetColumn=os.getenv('TARGET_COLUMN'),State=None,Tfs_Column=os.getenv('KANBAN_COLUMN'),Comment='Dear Start',Assignee=None )
-
-
 
 
 
