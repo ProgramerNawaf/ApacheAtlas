@@ -15,6 +15,31 @@ from requests.auth import HTTPBasicAuth
 
 
 
+def add_change_records(df, columns, cr_detection, change_type):
+    """
+    Process dataframe records and add to CR_DETECTION.
+    
+    Args:
+        df: pandas DataFrame to process
+        columns: list of column names to extract
+        cr_detection: CR_DETECTION dictionary to update
+        change_type: key in CR_DETECTION dict (default: 'Change Attribute')
+    """
+    if df.empty:
+        return
+    
+    records = (
+        df[columns]
+        .drop_duplicates()
+        .replace({np.nan: None})
+        .to_dict('records')
+    )
+    
+    if records:
+        cr_detection[change_type].extend(records)
+        cr_detection['Logs']['total_changes'] += len(records)
+        
+
             
 
 if __name__ == '__main__':
@@ -32,78 +57,77 @@ if __name__ == '__main__':
         },
         "Impacted Pipliens": []
     }
-    customMetaDataCatlogDatabase=Connection(option='Destination',databaseType='SQL')
-    customMetaDataCatlogDatabase.connect()
+#     # customMetaDataCatlogDatabase=Connection(option='Destination',databaseType='SQL')
+#     # customMetaDataCatlogDatabase.connect()
 
-    print('testing connection destinationDatabase ',customMetaDataCatlogDatabase.testConnection())
+#     # print('testing connection destinationDatabase ',customMetaDataCatlogDatabase.testConnection())
+
+# #     query=f'''
+# #                SELECT
+# #                 DA.ID as DATASTORE_ID , PP.ID as PIPELINE_ID , P.ID as ATTRIBUTE_ID , t.Connection_ID as CONNECTION_ID , 
+# #                 T.Schema_Name as TABLE_SCHEMA,
+# #                 T.Table_Name as TABLE_NAME,
+# #                 P.Attribute_Name as ATTRIBUTE_NAME,
+# #                 P.Attribute_Type as DATA_TYPE,
+# #                 CASE WHEN P.IsPK = 1 THEN 'Yes' WHEN P.IsPK = 0 THEN 'No' END AS IS_PK,
+# #                 CASE WHEN P.IsFK = 1 THEN 'Yes' WHEN P.IsFK = 0 THEN 'No' END AS IS_FK,
+# #                 CASE WHEN P.IsLastOperation_Attribute = 1 THEN 'Yes' END AS IsLastOperation_Attribute,
+# #                 CASE WHEN P.IsTimestamp_Attribute = 1 THEN 'Yes' END AS IsTimestamp_Attribute,
+# #                 P.Attribute_Format,
+# #                 RA.Referenced_Schema,
+# #                 RA.Referenced_Tables,
+# #                 RA.Referenced_Attributes,
+# #                 CASE WHEN P.IsMasked = 1 THEN 'Yes' WHEN P.IsMasked = 0 THEN 'No' END AS IsMasked
+# #                 FROM Meta_Agency A
+# #                 LEFT JOIN Meta_Dataset D ON A.ID = D.Agency_ID
+# #                 LEFT JOIN Meta_Datastore DA ON DA.Dataset_ID = D.ID
+# #                 LEFT JOIN Meta_Pipeline PP ON DA.ID = PP.Datastore_ID
+# #                 LEFT JOIN Meta_Attribute P ON P.Datastore_ID = DA.ID
+# #                 LEFT JOIN Meta_Table T ON T.Datastore_ID = DA.ID
+# #                 LEFT JOIN (
+# #                 SELECT
+# #                 a1.ID AS Attribute_ID,
+# #                 STRING_AGG(CASE WHEN t1.Schema_Name IS NOT NULL THEN t1.Schema_Name END, ' | ') AS Referenced_Schema,
+# #                 STRING_AGG(CASE WHEN t1.Table_Name IS NOT NULL THEN t1.Table_Name END, ' | ') AS Referenced_Tables,
+# #                 STRING_AGG(CASE WHEN a2.Attribute_Name IS NOT NULL THEN a2.Attribute_Name END, ' | ') WITHIN GROUP (ORDER BY a2.Attribute_Name) AS Referenced_Attributes
+# #                 FROM Meta_Attribute_Reference ra
+# #                 JOIN Meta_Attribute a1 ON ra.Attribute_ID = a1.id
+# #                 JOIN Meta_Attribute a2 ON ra.Reference_Attribute_ID = a2.id
+# #                 JOIN Meta_Datastore d1 ON d1.ID = a2.Datastore_ID
+# #                 JOIN Meta_Table t1 ON d1.ID = t1.Datastore_ID
+# #                 GROUP BY a1.ID
+# #                 ) RA ON P.ID = RA.Attribute_ID
+# #                 WHERE Agency_Short_Name = '{os.getenv('AGENCY')}'
+
+# #                 AND Dataset_Short_Name = '{os.getenv('DATASET')}'
+# #                 and DA.Datastore_Name in ('ossys_Tenant' , 'OSUSR_kzv_AssistedFlareType') -- and P.ATTRIBUTE_NAME !='IS_ACTIVE'
+# #                 AND DA.Datastore_Zone = 4
+# #                 AND DA.IsActive = 1
+# #                 AND T.IsActive = 1
+# #                 AND P.IsActive = 1 
+# # '''
+# #     cmcTableDF=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+
+# #     connectionDF=customMetaDataCatlogDatabase.retriveAConnection(cmcTableDF['CONNECTION_ID'][cmcTableDF.index.min()])
+# #     connectionDF=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+
+    # if(os.getenv('DATASET') == 'IGS'):
+    customMetaDataCatlogDatabase=Connection(IP='localhost',port= '1433',databaseName='MetadataTracking',password='123456' ,userName='crdetect1',databaseType='SQL')
+    print(customMetaDataCatlogDatabase.connect())
+    print('testing connection sourceDatabase ',customMetaDataCatlogDatabase.testConnection())
+    metadataDF=customMetaDataCatlogDatabase.getMetadataDF()
+    # else:
+    sourceConnection=Connection(IP='localhost',port= '1521',databaseName='XEPDB1',password='123456' ,userName='loadTest',databaseType='ORCL')
+    print(sourceConnection.connect())
+    print('testing connection sourceDatabase ',sourceConnection.testConnection())
+    metadataDF=sourceConnection.getMetadataDF()
 
     query=f'''
-               SELECT
-                DA.ID as DATASTORE_ID , PP.ID as PIPELINE_ID , P.ID as ATTRIBUTE_ID , t.Connection_ID as CONNECTION_ID , 
-                T.Schema_Name as TABLE_SCHEMA,
-                T.Table_Name as TABLE_NAME,
-                P.Attribute_Name as ATTRIBUTE_NAME,
-                P.Attribute_Type as DATA_TYPE,
-                CASE WHEN P.IsPK = 1 THEN 'Yes' WHEN P.IsPK = 0 THEN 'No' END AS IS_PK,
-                CASE WHEN P.IsFK = 1 THEN 'Yes' WHEN P.IsFK = 0 THEN 'No' END AS IS_FK,
-                CASE WHEN P.IsLastOperation_Attribute = 1 THEN 'Yes' END AS IsLastOperation_Attribute,
-                CASE WHEN P.IsTimestamp_Attribute = 1 THEN 'Yes' END AS IsTimestamp_Attribute,
-                P.Attribute_Format,
-                RA.Referenced_Schema,
-                RA.Referenced_Tables,
-                RA.Referenced_Attributes,
-                CASE WHEN P.IsMasked = 1 THEN 'Yes' WHEN P.IsMasked = 0 THEN 'No' END AS IsMasked
-                FROM Meta_Agency A
-                LEFT JOIN Meta_Dataset D ON A.ID = D.Agency_ID
-                LEFT JOIN Meta_Datastore DA ON DA.Dataset_ID = D.ID
-                LEFT JOIN Meta_Pipeline PP ON DA.ID = PP.Datastore_ID
-                LEFT JOIN Meta_Attribute P ON P.Datastore_ID = DA.ID
-                LEFT JOIN Meta_Table T ON T.Datastore_ID = DA.ID
-                LEFT JOIN (
-                SELECT
-                a1.ID AS Attribute_ID,
-                STRING_AGG(CASE WHEN t1.Schema_Name IS NOT NULL THEN t1.Schema_Name END, ' | ') AS Referenced_Schema,
-                STRING_AGG(CASE WHEN t1.Table_Name IS NOT NULL THEN t1.Table_Name END, ' | ') AS Referenced_Tables,
-                STRING_AGG(CASE WHEN a2.Attribute_Name IS NOT NULL THEN a2.Attribute_Name END, ' | ') WITHIN GROUP (ORDER BY a2.Attribute_Name) AS Referenced_Attributes
-                FROM Meta_Attribute_Reference ra
-                JOIN Meta_Attribute a1 ON ra.Attribute_ID = a1.id
-                JOIN Meta_Attribute a2 ON ra.Reference_Attribute_ID = a2.id
-                JOIN Meta_Datastore d1 ON d1.ID = a2.Datastore_ID
-                JOIN Meta_Table t1 ON d1.ID = t1.Datastore_ID
-                GROUP BY a1.ID
-                ) RA ON P.ID = RA.Attribute_ID
-                WHERE Agency_Short_Name = '{os.getenv('AGENCY')}'
 
-                AND Dataset_Short_Name = '{os.getenv('DATASET')}'
-                and DA.Datastore_Name in ('ossys_Tenant' , 'OSUSR_kzv_AssistedFlareType') -- and P.ATTRIBUTE_NAME !='IS_ACTIVE'
-                AND DA.Datastore_Zone = 4
-                AND DA.IsActive = 1
-                AND T.IsActive = 1
-                AND P.IsActive = 1 
-'''
+
+        SELECT * FROM DBO.CMC_Columns WHERE PIPELINE_ID=31675 '''
     cmcTableDF=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
 
-#     connectionDF=customMetaDataCatlogDatabase.retriveAConnection(cmcTableDF['CONNECTION_ID'][cmcTableDF.index.min()])
-#     connectionDF=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
-
-    if(os.getenv('TYPE') == 'SQL'):
-       sourceConnection=Connection(IP='localhost',port= '1433',databaseName='MetadataTracking',password='123456' ,userName='crdetect1',databaseType='SQL')
-       print(sourceConnection.connect())
-       print('testing connection sourceDatabase ',sourceConnection.testConnection())
-       metadataDF=sourceConnection.getMetadataDF()
-    else:
-        sourceConnection=Connection(IP='localhost',port= '1521',databaseName='XEPDB1',password='123456' ,userName='loadTest',databaseType='ORCL')
-        print(sourceConnection.connect())
-        print('testing connection sourceDatabase ',sourceConnection.testConnection())
-        metadataDF=sourceConnection.getMetadataDF()
-
-    
-    
-    
-
-
-    # print(cmcTableDF)
-    print(metadataDF)
  
 
     added_columns = metadataDF.merge(
@@ -125,7 +149,7 @@ if __name__ == '__main__':
 
 
     added_tables = (
-    added_columns[['TABLE_SCHEMA', 'TABLE_NAME']]
+    added_columns[['TABLE_SCHEMA', 'TABLE_NAME' , 'TABLE_OBJECT_ID']]
     .drop_duplicates()
     .to_dict('records')
     )
@@ -135,7 +159,7 @@ if __name__ == '__main__':
 
 
     deleted_tables = (
-    deleted_columns[['TABLE_SCHEMA', 'TABLE_NAME' , 'PIPELINE_ID']]
+    deleted_columns[['TABLE_SCHEMA', 'TABLE_NAME' , 'PIPELINE_ID' , 'DATASTORE_ID']]
     .drop_duplicates()
     .to_dict('records')
     )
@@ -144,9 +168,6 @@ if __name__ == '__main__':
     .dropna()
     .tolist()
     )
-
-
-   
 
     CR_DETECTION['Delete Table'].extend(deleted_tables)
     CR_DETECTION['Logs']['total_changes'] += len(deleted_tables)
@@ -170,43 +191,39 @@ if __name__ == '__main__':
     added_columns = common_table_columns[common_table_columns['_merge'] == 'right_only'].copy()
     common_columns = common_table_columns[common_table_columns['_merge'] == 'both'].copy()
 
-    records = (
-        added_columns[list({
-        'TABLE_SCHEMA': 'TABLE_SCHEMA',
-        'TABLE_NAME': 'TABLE_NAME',
-        'ATTRIBUTE_NAME': 'ATTRIBUTE_NAME',
-        'DATA_TYPE_SOURCE': 'DATA_TYPE',
-        'IS_PK_SOURCE': 'IS_PK',
-        'IS_FK_SOURCE': 'IS_FK',
-    }.keys())]
-            .drop_duplicates()
-            .replace({np.nan: None})
-            .to_dict('records')
+
+    columns=[
+        'TABLE_SCHEMA',
+        'COLUMN_ID',
+        'TABLE_NAME', 
+        'ATTRIBUTE_NAME',
+        'DATA_TYPE_SOURCE',
+        'IS_PK_SOURCE',
+        'IS_FK_SOURCE'
+    ]
+    add_change_records(added_columns, columns, CR_DETECTION , 'Add Attribute')
+
+
+    
+    deleted_columns=[
+        'TABLE_SCHEMA',
+        'TABLE_NAME',
+        'PIPELINE_ID',
+        'ATTRIBUTE_NAME',
+        'IS_PK_CMC',
+        'IS_FK_CMC'
+    ]
+    add_change_records(deleted_common_columns, deleted_columns, CR_DETECTION , 'Delete Attribute')
+
+    pipe_ids = (
+    deleted_common_columns['PIPELINE_ID']
+    .dropna()
+    .astype(int)
+    .tolist()
     )
-
-    # Append and bump the counter
-    CR_DETECTION['Add Attribute'].extend(records)
-    CR_DETECTION['Logs']['total_changes'] += len(records)
-
-
-    records = (
-        deleted_common_columns[list({
-        'TABLE_SCHEMA': 'TABLE_SCHEMA',
-        'TABLE_NAME': 'TABLE_NAME',
-        'ATTRIBUTE_NAME': 'ATTRIBUTE_NAME',
-        'IS_PK_CMC': 'IS_PK',
-        'IS_FK_CMC': 'IS_FK',
-    }.keys())]
-            .drop_duplicates()
-            .replace({np.nan: None})
-            .to_dict('records')
+    CR_DETECTION['Impacted Pipliens'] = list(
+        dict.fromkeys(CR_DETECTION['Impacted Pipliens'] + pipe_ids)
     )
-
-    # Append and bump the counter
-    CR_DETECTION['Delete Attribute'].extend(records)
-    CR_DETECTION['Logs']['total_changes'] += len(records)
-
-
 
     modified_PK = common_table_columns[
     (common_table_columns['DATA_TYPE_CMC'].notna()) & 
@@ -215,26 +232,15 @@ if __name__ == '__main__':
         ].copy().assign(CHANGE_TYPE='Primary Key')  
     
 
-    
-    
-    records = (
-        modified_PK[list({
-           'TABLE_SCHEMA': 'TABLE_SCHEMA',
-            'TABLE_NAME': 'TABLE_NAME',
-            'ATTRIBUTE_NAME':'ATTRIBUTE_NAME',
-            'IS_PK_CMC': 'IS_PK_CMC',
-            'IS_PK_SOURCE':'IS_PK_SOURCE',
-            'CHANGE_TYPE':'Primary Key'
-    }.keys())]
-            .drop_duplicates()
-            .replace({np.nan: None})
-            .to_dict('records')
-    )
-
-    CR_DETECTION['Change Attribute'].extend(records)
-    CR_DETECTION['Logs']['total_changes'] += len(records)
-
-    
+    pk_columns=[
+           'TABLE_SCHEMA',
+            'TABLE_NAME',
+            'ATTRIBUTE_NAME',
+            'IS_PK_CMC',
+            'IS_PK_SOURCE',
+            'CHANGE_TYPE'
+    ]
+    add_change_records(modified_PK, pk_columns, CR_DETECTION , 'Change Attribute')
 
 
     modified_datatypes = common_columns[
@@ -243,25 +249,16 @@ if __name__ == '__main__':
     (common_columns['DATA_TYPE_CMC'] != common_columns['DATA_TYPE_SOURCE'])
         ].copy().assign(CHANGE_TYPE='Data Type and Length')
     
-    records = (
-        modified_datatypes[list({
-           'TABLE_SCHEMA': 'TABLE_SCHEMA',
-            'TABLE_NAME': 'TABLE_NAME',
-            'ATTRIBUTE_NAME':'ATTRIBUTE_NAME',
-            'DATA_TYPE_CMC': 'DATA_TYPE_CMC',
-            'DATA_TYPE_SOURCE':'DATA_TYPE_SOURCE',
-            'CHANGE_TYPE':'Data Type and Length'
-    }.keys())]
-            .drop_duplicates()
-            .replace({np.nan: None})
-            .to_dict('records')
-    )
-
-    CR_DETECTION['Change Attribute'].extend(records)
-    CR_DETECTION['Logs']['total_changes'] += len(records)
     
-
-        
+    datatype_columns = [
+    'TABLE_SCHEMA',
+    'TABLE_NAME',
+    'ATTRIBUTE_NAME',
+    'DATA_TYPE_CMC',
+    'DATA_TYPE_SOURCE',
+    'CHANGE_TYPE'
+]
+    add_change_records(modified_datatypes, datatype_columns, CR_DETECTION , 'Change Attribute')    
     pipeline_ids = modified_datatypes['PIPELINE_ID'].unique().astype(int).tolist()
     existing_ids = set(CR_DETECTION['Impacted Pipliens'])
     new_ids = set(pipeline_ids)
@@ -269,15 +266,105 @@ if __name__ == '__main__':
     ids_to_add = new_ids - existing_ids
     CR_DETECTION['Impacted Pipliens'].extend(ids_to_add)
     
-   
+    
     json_payload = json.dumps(CR_DETECTION, ensure_ascii=False, indent=2)
     print(json_payload)
     
-    # azureDevops  = AzureDevops(os.getenv('ORGANIZATION'),os.getenv('AREA_PATH'),os.getenv('PAT'),os.getenv('ORGANIZATION'))
-    # workItems=azureDevops.getWorkItems(os.getenv('AGENCY') , os.getenv('DATASET'))
     
-    # print(workItems)
-    # updateworkItem=azureDevops.updateTicket(TicketID=workItems[0]['id'],TargetColumn=os.getenv('TARGET_COLUMN'),State=None,Tfs_Column=os.getenv('KANBAN_COLUMN'),Comment='Dear Start',Assignee=None )
+
+    if CR_DETECTION['Logs']['total_changes'] > 0:
+        
+        query=f'''
+           INSERT INTO [snapshot_detection] ([dataset_id] , [total_objects_captured])
+           OUTPUT INSERTED.snapshot_id      
+           VALUES ( 1000 , {CR_DETECTION['Logs']['total_changes']}) 
+
+'''
+        
+        result=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+        snapshot_id=int(result['snapshot_id'][0])
+
+
+        if CR_DETECTION['Add Table']:
+
+            for record in added_tables:
+                query = f'''
+                   SET NOCOUNT ON
+                    INSERT INTO [dbo].[metadata_detection] 
+                    ([snapshot_id], [source_object_id], [source_value], [change_type])
+                    VALUES ({snapshot_id}, {record['TABLE_OBJECT_ID']}, '{record['TABLE_NAME']}', 'Add Table')
+                    SELECT 1 AS A
+                '''
+                result=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+
+        if CR_DETECTION['Delete Table']:
+
+            for record in deleted_tables:
+                query = f'''
+                   SET NOCOUNT ON
+                    INSERT INTO [dbo].[metadata_detection] 
+                    ([snapshot_id], [metadata_cmc_id], [change_type])
+                    VALUES ({snapshot_id}, {record['DATASTORE_ID']} , 'Delete Table')
+                    SELECT 1 AS A
+                '''
+                result=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+
+        if CR_DETECTION['Add Attribute']:
+            added_columns['COLUMN_ID'] = pd.to_numeric(added_columns['COLUMN_ID'], errors='raise').astype('int64')
+            for index, row in added_columns.iterrows():
+                query = f'''
+                    SET NOCOUNT ON
+                    INSERT INTO [dbo].[metadata_detection] 
+                    ([snapshot_id], [source_object_id], [source_value], [change_type])
+                    VALUES ({snapshot_id}, {row['COLUMN_ID']}, '{row['ATTRIBUTE_NAME']}', 'Add Attribute')
+                    SELECT 1 AS A
+                '''
+                result=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+
+        
+        if CR_DETECTION['Delete Attribute']:
+            deleted_common_columns['ATTRIBUTE_ID'] = pd.to_numeric(deleted_common_columns['ATTRIBUTE_ID'], errors='raise').astype('int64')
+            for index, row in deleted_common_columns.iterrows():
+                query = f'''
+                    SET NOCOUNT ON
+                    INSERT INTO [dbo].[metadata_detection] 
+                    ([snapshot_id], [metadata_cmc_id],  [change_type])
+                    VALUES ({snapshot_id}, {row['ATTRIBUTE_ID']}, 'Delete Attribute')
+                    SELECT 1 AS A
+                '''
+                result=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+
+        if CR_DETECTION['Change Attribute']:
+            modified_PK['COLUMN_ID'] = pd.to_numeric(modified_PK['COLUMN_ID'], errors='raise').astype('int64')
+            modified_PK['ATTRIBUTE_ID'] = pd.to_numeric(modified_PK['ATTRIBUTE_ID'], errors='raise').astype('int64')
+            for index, row in modified_PK.iterrows():
+                query = f'''
+                    SET NOCOUNT ON
+                    INSERT INTO [dbo].[metadata_detection] 
+                    ([snapshot_id], [source_object_id], [metadata_cmc_id] , [source_value], [change_type])
+                    VALUES ({snapshot_id}, {row['COLUMN_ID']},  '{row['ATTRIBUTE_ID']}', '{row['IS_PK_SOURCE']}', '{row['CHANGE_TYPE']}')
+                    SELECT 1 AS A
+                '''
+                result=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+
+            modified_datatypes['COLUMN_ID'] = pd.to_numeric(modified_datatypes['COLUMN_ID'], errors='raise').astype('int64')
+            modified_datatypes['ATTRIBUTE_ID'] = pd.to_numeric(modified_datatypes['ATTRIBUTE_ID'], errors='raise').astype('int64')
+            for index, row in modified_datatypes.iterrows():
+                query = f'''
+                    SET NOCOUNT ON
+                    INSERT INTO [dbo].[metadata_detection] 
+                    ([snapshot_id], [source_object_id], [metadata_cmc_id] , [source_value], [change_type])
+                    VALUES ({snapshot_id}, {row['COLUMN_ID']},  '{row['ATTRIBUTE_ID']}', '{row['DATA_TYPE_SOURCE']}', '{row['CHANGE_TYPE']}')
+                    SELECT 1 AS A
+                '''
+                result=pd.read_sql(query,customMetaDataCatlogDatabase.getConnection())
+            
+
+    
+        azureDevops  = AzureDevops(os.getenv('ORGANIZATION'),os.getenv('AREA_PATH'),os.getenv('PAT'),os.getenv('ORGANIZATION'))
+        workItems=azureDevops.getWorkItems(os.getenv('AGENCY') , os.getenv('DATASET'))
+        print(workItems)
+        updateworkItem=azureDevops.updateTicket(TicketID=workItems[0]['id'],TargetColumn=os.getenv('TARGET_COLUMN'),State=None,Tfs_Column=os.getenv('KANBAN_COLUMN'),Comment='Dear DQ Start',Assignee=None )
 
 
 
