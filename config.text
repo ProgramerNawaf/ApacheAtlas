@@ -1358,6 +1358,8 @@ class Connection:
             msg=0
             try:
                 query='''   SELECT
+    OBJECT_ID(cols.TABLE_SCHEMA + '.' + cols.TABLE_NAME) AS TABLE_OBJECT_ID,
+    COLUMNPROPERTY(OBJECT_ID(cols.TABLE_SCHEMA + '.' + cols.TABLE_NAME), cols.COLUMN_NAME, 'ColumnId') AS COLUMN_ID,
     TABLE_SCHEMA,
     TABLE_NAME,
     COLUMN_NAME ATTRIBUTE_NAME,
